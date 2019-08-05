@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="SoundWaveView">
+        <attr name="display_negative" format="boolean"/>
+        <attr name="block_margin" format="integer"/>
+        <attr name="block_size" format="integer"/>
+        <attr name="block_min_height" format="integer"/>
+        <attr name="played_block_color" format="color"/>
+        <attr name="not_played_block_color" format="color"/>
+    </declare-styleable>
+</resources>
