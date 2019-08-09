@@ -6,6 +6,7 @@ import android.media.MediaPlayer
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
+import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -18,10 +19,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val player1 = SimplePlayer(this, R.raw.test1)
-        val player2 = SimplePlayer(this, R.raw.test2)
-        val player3 = SimplePlayer(this, R.raw.test3)
-        val player4 = SimplePlayer(this, R.raw.test3)
+        val player1 = SimplePlayer(this, R.id.sound_wave_view_1, R.raw.test1)
+        val player2 = SimplePlayer(this, R.id.sound_wave_view_2, R.raw.test2)
+        val player3 = SimplePlayer(this, R.id.sound_wave_view_3, R.raw.test3)
+        val player4 = SimplePlayer(this, R.id.sound_wave_view_4, R.raw.test3)
 
         player4.soundWaveView.blockSize = 10
         player4.soundWaveView.blockMargin = 4
@@ -29,11 +30,16 @@ class MainActivity : AppCompatActivity() {
         container.addView(player1.containerView)
         container.addView(player2.containerView)
         container.addView(player3.containerView)
+        container.addView(player4.containerView)
+
+        val inflatedSoundView = layoutInflater.inflate(R.layout.sound_view, container, false) as SoundWaveView
+        inflatedSoundView.setSound(resources.openRawResourceFd(R.raw.test2))
+        container.addView(inflatedSoundView)
     }
 
 }
 
-class SimplePlayer(context: Context, assetId: Int) {
+class SimplePlayer(context: Context, viewId: Int, assetId: Int) {
 
     val mediaPlayer: MediaPlayer = MediaPlayer.create(context, assetId)
 
@@ -53,7 +59,7 @@ class SimplePlayer(context: Context, assetId: Int) {
         val waveViewUpdateRunnable = object: Runnable {
             override fun run() {
                 val percent = mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration.toFloat()
-                soundWaveView.setProgress(percent)
+                soundWaveView.progress = percent
                 waveViewUpdateHandler.postDelayed(this, 100)
             }
         }
@@ -73,6 +79,7 @@ class SimplePlayer(context: Context, assetId: Int) {
             playing = !playing
         }
 
+        soundWaveView.id = viewId
         soundWaveView.setBackgroundColor(Color.BLUE)
         soundWaveView.seekListener = object: SoundWaveView.OnSeekListener {
             override fun onSeekBegin(progress: Float) {

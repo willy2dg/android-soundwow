@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.dialog.soundwow.SoundWaveView
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:orientation="vertical"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        app:display_negative="true"
+        app:block_margin="2"
+        app:block_size="8"
+        app:not_played_block_color="@color/colorYellow">
+
+</com.dialog.soundwow.SoundWaveView>

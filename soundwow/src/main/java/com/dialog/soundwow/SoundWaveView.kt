@@ -91,6 +91,14 @@ class SoundWaveView : View {
             invalidate()
         }
 
+    var progress: Float
+        get() = currentPercent
+        set(value){
+            currentPercent = value
+            computeBlockProgress()
+            invalidate()
+        }
+
     constructor(context: Context) : super(context) {
         init(null)
     }
@@ -124,18 +132,14 @@ class SoundWaveView : View {
         typedArray.recycle()
     }
 
+    // load sound file to the view
     fun setSound(file: File) {
         DecodeSoundFileTask(this).execute(file)
     }
 
+    // load sound asset to the view
     fun setSound(assetFileDescriptor: AssetFileDescriptor) {
         DecodeSoundAssetTask(this).execute(assetFileDescriptor)
-    }
-
-    fun setProgress(percent: Float) {
-        currentPercent = percent
-        computeBlockProgress()
-        invalidate()
     }
 
     // use attributes to compute available blocks
@@ -177,54 +181,6 @@ class SoundWaveView : View {
         soundInfo!!.samples.rewind()
     }
 
-    private inner class SoundWaveGestureListener : GestureDetector.SimpleOnGestureListener() {
-
-        override fun onDown(e: MotionEvent?): Boolean {
-            return true
-        }
-
-        override fun onLongPress(event: MotionEvent) {
-            super.onLongPress(event)
-            userDragging = true
-            setProgress(event.x / width)
-            seekListener?.onSeekBegin(event.x / width)
-        }
-
-        override fun onSingleTapUp(event: MotionEvent): Boolean {
-            setProgress(event.x / width)
-            seekListener?.onSeekComplete(event.x / width)
-            return super.onSingleTapUp(event)
-        }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    override fun onTouchEvent(event: MotionEvent): Boolean {
-        gestureDetector.onTouchEvent(event)
-
-        when (event.action) {
-            MotionEvent.ACTION_MOVE -> {
-                if ( userDragging ) {
-                    val normalizedX: Float = if (event.x < 0) 0f else if(event.x > width) width.toFloat() else event.x
-                    val selectedProgress = normalizedX / width
-                    parent.requestDisallowInterceptTouchEvent(true)
-                    setProgress(selectedProgress)
-                    seekListener?.onSeekUpdate(selectedProgress)
-                }
-            }
-            MotionEvent.ACTION_UP -> {
-                if ( userDragging ) {
-                    val normalizedX: Float = if (event.x < 0) 0f else if(event.x > width) width.toFloat() else event.x
-                    val selectedProgress = normalizedX / width
-                    userDragging = false
-                    setProgress(selectedProgress)
-                    seekListener?.onSeekComplete(selectedProgress)
-                }
-            }
-        }
-
-        return true
-    }
-
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
         computeBlocks()
@@ -238,8 +194,61 @@ class SoundWaveView : View {
         blockDrawer.drawBlocks(canvas, blockSettings, blocksResume, currentBlock)
     }
 
+    @SuppressLint("ClickableViewAccessibility")
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        gestureDetector.onTouchEvent(event)
+
+        when (event.action) {
+            MotionEvent.ACTION_MOVE -> {
+                if ( userDragging ) {
+                    val normalizedX: Float = if (event.x < 0) 0f else if(event.x > width) width.toFloat() else event.x
+                    val selectedProgress = normalizedX / width
+                    parent.requestDisallowInterceptTouchEvent(true)
+                    progress = selectedProgress
+                    seekListener?.onSeekUpdate(selectedProgress)
+                }
+            }
+            MotionEvent.ACTION_UP -> {
+                if ( userDragging ) {
+                    val normalizedX: Float = if (event.x < 0) 0f else if(event.x > width) width.toFloat() else event.x
+                    val selectedProgress = normalizedX / width
+                    userDragging = false
+                    progress = selectedProgress
+                    seekListener?.onSeekComplete(selectedProgress)
+                }
+            }
+        }
+
+        return true
+    }
+
+    // helper class to handle long press
+    private inner class SoundWaveGestureListener : GestureDetector.SimpleOnGestureListener() {
+
+        override fun onDown(e: MotionEvent?): Boolean {
+            return true
+        }
+
+        override fun onLongPress(event: MotionEvent) {
+            super.onLongPress(event)
+            userDragging = true
+            progress = event.x / width
+            seekListener?.onSeekBegin(event.x / width)
+        }
+
+        override fun onSingleTapUp(event: MotionEvent): Boolean {
+            progress = event.x / width
+            seekListener?.onSeekComplete(event.x / width)
+            return super.onSingleTapUp(event)
+        }
+    }
+
+    /* INTERNAL CLASSES */
+
+    // convenient class to represent block values
     class BlockResume(var positiveResume: Short, var negativeResume: Short = 0)
 
+    // class to group the custom attributes for the view
     class BlockSettings(
         var size: Int = 1,
         var margin: Int = 0,
@@ -249,10 +258,14 @@ class SoundWaveView : View {
         var notPlayedColor: Int = Color.RED
     )
 
+    /* INTERFACES */
+
+    // used to compute the high and low values for every block
     interface SamplesGrouper {
         fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): BlockResume
     }
 
+    // used to draw the blocks
     interface BlockDrawer {
         fun drawBlocks(
             canvas: Canvas,
@@ -262,6 +275,7 @@ class SoundWaveView : View {
         )
     }
 
+    // used to listen seek events from external class
     interface OnSeekListener {
         fun onSeekBegin(progress: Float)
         fun onSeekUpdate(progress: Float)
@@ -270,6 +284,7 @@ class SoundWaveView : View {
 
 }
 
+// AsyncTaks to decode the sound from File
 private class DecodeSoundFileTask(waveView: SoundWaveView) : AsyncTask<File, Void, SoundInfo>() {
 
     private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
@@ -287,6 +302,7 @@ private class DecodeSoundFileTask(waveView: SoundWaveView) : AsyncTask<File, Voi
     }
 }
 
+// AsyncTaks to decode the sound from AssetFileDescriptor
 private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFileDescriptor, Void, SoundInfo>() {
 
     private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
@@ -304,6 +320,7 @@ private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFil
     }
 }
 
+// Class to compute block values taking the high sample for each block
 private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
 
     override fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): SoundWaveView.BlockResume {
@@ -332,6 +349,7 @@ private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
     }
 }
 
+// Class to compute block values averaging the samples
 private class AverageSamplesGrouper : SoundWaveView.SamplesGrouper {
 
     override fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): SoundWaveView.BlockResume {
@@ -371,6 +389,7 @@ private class AverageSamplesGrouper : SoundWaveView.SamplesGrouper {
     }
 }
 
+// Default block drawer, can be used to draw lines or rectangles
 private class LineBlockDrawer : SoundWaveView.BlockDrawer {
 
     override fun drawBlocks(

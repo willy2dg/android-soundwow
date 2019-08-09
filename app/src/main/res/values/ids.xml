@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="sound_wave_view_1" type="id"/>
+    <item name="sound_wave_view_2" type="id"/>
+    <item name="sound_wave_view_3" type="id"/>
+    <item name="sound_wave_view_4" type="id"/>
+</resources>
