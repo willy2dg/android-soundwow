@@ -23,8 +23,9 @@ class SoundWaveView : View {
     private lateinit var gestureDetector: GestureDetectorCompat
 
     private val blockSettings: BlockSettings = BlockSettings()
-    private var samplesGrouper: SamplesGrouper = MaxSamplesGrouper()
-    private var blockDrawer: BlockDrawer = LineBlockDrawer()
+
+    var samplesGrouper: SamplesGrouper = MaxSamplesGrouper()
+    var blockDrawer: BlockDrawer = LineBlockDrawer()
 
     var seekListener: OnSeekListener? = null
 
