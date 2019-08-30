@@ -10,9 +10,11 @@ import android.graphics.Paint
 import android.os.AsyncTask
 import android.os.Build
 import android.util.AttributeSet
+import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Toast
 import androidx.core.view.GestureDetectorCompat
 import java.io.File
 import java.lang.ref.WeakReference
@@ -29,25 +31,31 @@ class SoundWaveView : View {
 
     var seekListener: OnSeekListener? = null
 
-    private var blocksValues: ShortArray = ShortArray(0)
-
-    private var currentPercent: Float = 0f
-    private var currentBlock: Int = 0
-
     private var blocksAmount: Int = 0
 
     private var topOrigin: Float = 0f
     private var bottomOrigin: Float = 0f
-
     private var normalizeFactor: Float = 1f
 
     private var userDragging: Boolean = false
+
+    private var currentPercent: Float = 0f
+    private var currentBlock: Int = 0
+        set(value){
+            field = value
+            invalidate()
+        }
+
+    var blockValues: ShortArray = ShortArray(0)
+        set(value){
+            field = value
+            invalidate()
+        }
 
     var soundInfo: SoundInfo? = null // decoded sound
         set(value){
             field = value
             computeBlockData()
-            invalidate()
         }
 
     var blockMargin: Int
@@ -154,7 +162,6 @@ class SoundWaveView : View {
 
         computeBlockProgress()
         computeBlockData()
-        invalidate()
     }
 
     // use computed blocks and progress to compute reproduced blocks
@@ -166,19 +173,13 @@ class SoundWaveView : View {
     private fun computeBlockData() {
         if (blocksAmount == 0) return
 
-        blocksValues = ShortArray(blocksAmount){ 0 }
+        blockValues = ShortArray(blocksAmount){ 0 }
 
         val soundInfo: SoundInfo = soundInfo ?: return
 
         val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount
-
-        blocksValues = samplesGrouper.groupSamples(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
-
-        /*for (i in 0 until blocksAmount) {
-            blocksValues[i] = (samplesGrouper.groupSamples(soundInfo.samples, samplesPerBlock) * normalizeFactor).toShort()
-        }
-
-        soundInfo.samples.rewind()*/
+        val taskParams = ComputeBlockValuesTaskParams(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
+        ComputeBlockValuesTask(this).execute(taskParams)
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -191,7 +192,7 @@ class SoundWaveView : View {
 
         if (width == 0 || blocksAmount < 1) return
 
-        blockDrawer.drawBlocks(canvas, blockSettings, blocksValues, topOrigin, bottomOrigin, currentBlock)
+        blockDrawer.drawBlocks(canvas, blockSettings, blockValues, topOrigin, bottomOrigin, currentBlock)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -301,7 +302,7 @@ private class DecodeSoundFileTask(waveView: SoundWaveView) : AsyncTask<File, Voi
     }
 }
 
-// AsyncTaks to decode the sound from AssetFileDescriptor
+// AsyncTask to decode the sound from AssetFileDescriptor
 private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFileDescriptor, Void, SoundInfo>() {
 
     private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
@@ -318,6 +319,26 @@ private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFil
         waveView?.soundInfo = result
     }
 }
+
+// AsyncTask to compute block values
+private class ComputeBlockValuesTask(waveView: SoundWaveView) : AsyncTask<ComputeBlockValuesTaskParams, Void, ShortArray>() {
+
+    private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
+
+    override fun doInBackground(vararg params: ComputeBlockValuesTaskParams): ShortArray? {
+        val waveView: SoundWaveView = waveViewReference.get() ?: return null
+        return waveView.samplesGrouper.groupSamples(params[0].samples, params[0].blocksAmount, params[0].samplesPerBlock, params[0].normalizeFactor )
+    }
+
+    override fun onPostExecute(result: ShortArray?) {
+        super.onPostExecute(result)
+
+        val waveView: SoundWaveView = waveViewReference.get() ?: return
+        waveView.blockValues = result ?: return
+    }
+}
+
+private class ComputeBlockValuesTaskParams(val samples: ShortBuffer, val blocksAmount: Int, val samplesPerBlock: Int, val normalizeFactor: Float)
 
 // Class to compute block values taking the high sample for each block
 private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
