@@ -168,18 +168,18 @@ class SoundWaveView : View {
 
         blocksResume = Array(blocksAmount) { BlockResume(topOrigin.toShort(), bottomOrigin.toShort()) }
 
-        if (soundInfo == null) return
+        val soundInfo: SoundInfo = soundInfo ?: return
 
-        val samplesPerBlock = (soundInfo!!.samplesCount * soundInfo!!.channels) / blocksAmount // TODO check if there are more space that samples
+        val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount // TODO check if there are more space that samples
 
         for (i in 0 until blocksAmount) {
-            val blockResume = samplesGrouper.groupSamples(soundInfo!!.samples, samplesPerBlock, blockSettings.displayNegative)
+            val blockResume = samplesGrouper.groupSamples(soundInfo.samples, samplesPerBlock, blockSettings.displayNegative)
             blockResume.positiveResume = (topOrigin - blockResume.positiveResume * normalizeFactor).toShort()
             blockResume.negativeResume = (bottomOrigin + Math.abs(blockResume.negativeResume * normalizeFactor)).toShort()
             blocksResume[i] = blockResume
         }
 
-        soundInfo!!.samples.rewind()
+        soundInfo.samples.rewind()
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {

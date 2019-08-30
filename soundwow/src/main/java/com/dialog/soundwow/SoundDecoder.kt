@@ -4,11 +4,7 @@ import android.content.res.AssetFileDescriptor
 import android.media.MediaCodec
 import android.media.MediaFormat
 import android.media.MediaExtractor
-import android.os.Bundle
-import android.os.Parcel
-import android.os.Parcelable
 import java.io.File
-import java.io.FileDescriptor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.ShortBuffer
@@ -30,7 +26,8 @@ class SoundDecoder {
 
             for (i in 0 until numTracks) {
                 format = extractor.getTrackFormat(i)
-                if (format.getString(MediaFormat.KEY_MIME)!!.startsWith("audio/")) {
+                val mimeType: String = format.getString(MediaFormat.KEY_MIME) ?: "empty"
+                if (mimeType.startsWith("audio/")) {
                     extractor.selectTrack(i)
                     selectedTrack = true
                     break
@@ -57,7 +54,8 @@ class SoundDecoder {
 
             for (i in 0 until numTracks) {
                 format = extractor.getTrackFormat(i)
-                if (format.getString(MediaFormat.KEY_MIME)!!.startsWith("audio/")) {
+                val mimeType: String = format.getString(MediaFormat.KEY_MIME) ?: "empty"
+                if (mimeType.startsWith("audio/")) {
                     extractor.selectTrack(i)
                     selectedTrack = true
                     break
@@ -76,7 +74,7 @@ class SoundDecoder {
             val channels: Int = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             val sampleRate: Int = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
             val songDuration: Long = format.getLong(MediaFormat.KEY_DURATION)
-            val mimeType: String = format.getString(MediaFormat.KEY_MIME)!!
+            val mimeType: String = format.getString(MediaFormat.KEY_MIME) ?: "unknown"
             // Expected total number of samples per channel.
             val expectedNumSamples = (songDuration / 1000000f * sampleRate + 0.5f).toInt()
 
@@ -145,7 +143,7 @@ class SoundDecoder {
                         if (newSize - position < info.size + 5 * (1 shl 20)) {
                             newSize = position + info.size + 5 * (1 shl 20)
                         }
-                        var newDecodedBytes: ByteBuffer? = null
+                        lateinit var newDecodedBytes: ByteBuffer
                         // Try to allocate memory. If we are OOM, try to run the garbage collector.
                         var retry = 10
                         while (retry > 0) {
@@ -166,7 +164,7 @@ class SoundDecoder {
                         }
                         //ByteBuffer newDecodedBytes = ByteBuffer.allocate(newSize);
                         decodedBytes.rewind()
-                        newDecodedBytes!!.put(decodedBytes)
+                        newDecodedBytes.put(decodedBytes)
                         decodedBytes = newDecodedBytes
                         decodedBytes.position(position)
                     }
