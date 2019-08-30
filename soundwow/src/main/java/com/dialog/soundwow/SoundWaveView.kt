@@ -29,7 +29,7 @@ class SoundWaveView : View {
 
     var seekListener: OnSeekListener? = null
 
-    private var blocksResume: Array<BlockResume> = emptyArray()
+    private var blocksValues: ShortArray = ShortArray(0)
 
     private var currentPercent: Float = 0f
     private var currentBlock: Int = 0
@@ -145,7 +145,7 @@ class SoundWaveView : View {
 
     // use attributes to compute available blocks
     private fun computeBlocks() {
-        blocksAmount = (width - blockSettings.margin) / (blockSettings.size + blockSettings.margin).toInt() // it can produce remaing space at the end
+        blocksAmount = (width - blockSettings.margin) / (blockSettings.size + blockSettings.margin) // it can produce remaing space at the end
 
         topOrigin = if (blockSettings.displayNegative) height / 2f - blockSettings.minHeight else (height - blockSettings.minHeight).toFloat()
         bottomOrigin = if (blockSettings.displayNegative) height / 2f + blockSettings.minHeight else height.toFloat()
@@ -166,17 +166,14 @@ class SoundWaveView : View {
     private fun computeBlockData() {
         if (blocksAmount == 0) return
 
-        blocksResume = Array(blocksAmount) { BlockResume(topOrigin.toShort(), bottomOrigin.toShort()) }
+        blocksValues = ShortArray(blocksAmount){ 0 }
 
         val soundInfo: SoundInfo = soundInfo ?: return
 
-        val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount // TODO check if there are more space that samples
+        val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount
 
         for (i in 0 until blocksAmount) {
-            val blockResume = samplesGrouper.groupSamples(soundInfo.samples, samplesPerBlock, blockSettings.displayNegative)
-            blockResume.positiveResume = (topOrigin - blockResume.positiveResume * normalizeFactor).toShort()
-            blockResume.negativeResume = (bottomOrigin + Math.abs(blockResume.negativeResume * normalizeFactor)).toShort()
-            blocksResume[i] = blockResume
+            blocksValues[i] = (samplesGrouper.groupSamples(soundInfo.samples, samplesPerBlock) * normalizeFactor).toShort()
         }
 
         soundInfo.samples.rewind()
@@ -192,7 +189,7 @@ class SoundWaveView : View {
 
         if (width == 0 || blocksAmount < 1) return
 
-        blockDrawer.drawBlocks(canvas, blockSettings, blocksResume, currentBlock)
+        blockDrawer.drawBlocks(canvas, blockSettings, blocksValues, topOrigin, bottomOrigin, currentBlock)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -246,9 +243,6 @@ class SoundWaveView : View {
 
     /* INTERNAL CLASSES */
 
-    // convenient class to represent block values
-    class BlockResume(var positiveResume: Short, var negativeResume: Short = 0)
-
     // class to group the custom attributes for the view
     class BlockSettings(
         var size: Int = 1,
@@ -263,7 +257,7 @@ class SoundWaveView : View {
 
     // used to compute the high and low values for every block
     interface SamplesGrouper {
-        fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): BlockResume
+        fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short
     }
 
     // used to draw the blocks
@@ -271,7 +265,9 @@ class SoundWaveView : View {
         fun drawBlocks(
             canvas: Canvas,
             blockSettings: BlockSettings,
-            blocksResume: Array<BlockResume>,
+            blockValues: ShortArray,
+            topOrigin: Float,
+            bottomOrigin: Float,
             currentBlock: Int
         )
     }
@@ -324,69 +320,31 @@ private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFil
 // Class to compute block values taking the high sample for each block
 private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
 
-    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): SoundWaveView.BlockResume {
+    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short {
+        var maxSample: Short = 0
 
-        if ( computeNegative ) {
-            var maxSample: Short = 0
-            var minSample: Short = 0
-
-            for ( i in 0 until samplesAmount ) {
-                val sample: Short = samples.get()
-                if (sample > maxSample) maxSample = sample
-                if (sample < minSample) minSample = sample
-            }
-
-            return SoundWaveView.BlockResume(maxSample, minSample)
-        } else {
-            var maxSample: Short = 0
-
-            for ( i in 0 until samplesAmount ) {
-                val sample: Short = samples.get()
-                if ( sample > maxSample ) maxSample = sample
-            }
-
-            return SoundWaveView.BlockResume(maxSample, 0)
+        for ( i in 0 until samplesAmount ) {
+            val sample: Short = samples.get()
+            if ( sample > maxSample ) maxSample = sample
         }
+
+        return maxSample
     }
 }
 
 // Class to compute block values averaging the samples
 private class AverageSamplesGrouper : SoundWaveView.SamplesGrouper {
 
-    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int, computeNegative: Boolean): SoundWaveView.BlockResume {
-        if ( computeNegative ) {
-            var positiveAltitude: Long = 0
-            var negativeAltitude:Long = 0
-            var positiveCount: Int = 0
-            var negativeCount: Int = 0
+    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short {
+        var positiveAltitude: Long = 0
 
-            for ( i in 0 until samplesAmount ) {
-
-                val sample: Short = samples.get()
-                if (sample < 0) {
-                    negativeAltitude += sample
-                    negativeCount++
-                } else {
-                    positiveAltitude += sample
-                    positiveCount++
-                }
-            }
-
-            if (positiveCount > 0) positiveAltitude /= positiveCount
-            if (negativeCount > 0) negativeAltitude /= negativeCount
-
-            return SoundWaveView.BlockResume(positiveAltitude.toShort(), negativeAltitude.toShort())
-        } else {
-            var positiveAltitude: Long = 0
-
-            for ( i in 0 until samplesAmount ) {
-                positiveAltitude += Math.abs(samples.get().toInt())
-            }
-
-            if ( samplesAmount > 0 ) positiveAltitude /= samplesAmount
-
-            return SoundWaveView.BlockResume(positiveAltitude.toShort(), 0)
+        for ( i in 0 until samplesAmount ) {
+            positiveAltitude += Math.abs(samples.get().toInt())
         }
+
+        if ( samplesAmount > 0 ) positiveAltitude /= samplesAmount
+
+        return positiveAltitude.toShort()
     }
 }
 
@@ -396,7 +354,9 @@ private class LineBlockDrawer : SoundWaveView.BlockDrawer {
     override fun drawBlocks(
         canvas: Canvas,
         blockSettings: SoundWaveView.BlockSettings,
-        blocksResume: Array<SoundWaveView.BlockResume>,
+        blockValues: ShortArray,
+        topOrigin: Float,
+        bottomOrigin: Float,
         currentBlock: Int
     ) {
 
@@ -405,7 +365,7 @@ private class LineBlockDrawer : SoundWaveView.BlockDrawer {
         paint.isAntiAlias = true
         paint.color = blockSettings.playedColor
 
-        for (i in 0 until blocksResume.size) {
+        for (i in 0 until blockValues.size) {
 
             if (i >= currentBlock) paint.color = blockSettings.notPlayedColor
 
@@ -414,9 +374,9 @@ private class LineBlockDrawer : SoundWaveView.BlockDrawer {
 
             canvas.drawLine(
                 left,
-                blocksResume[i].positiveResume.toFloat(),
+                topOrigin - blockValues[i],
                 left,
-                blocksResume[i].negativeResume.toFloat(),
+                bottomOrigin + blockValues[i],
                 paint
             )
         }
