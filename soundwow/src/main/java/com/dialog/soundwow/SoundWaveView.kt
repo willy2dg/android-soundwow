@@ -172,11 +172,13 @@ class SoundWaveView : View {
 
         val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount
 
-        for (i in 0 until blocksAmount) {
+        blocksValues = samplesGrouper.groupSamples(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
+
+        /*for (i in 0 until blocksAmount) {
             blocksValues[i] = (samplesGrouper.groupSamples(soundInfo.samples, samplesPerBlock) * normalizeFactor).toShort()
         }
 
-        soundInfo.samples.rewind()
+        soundInfo.samples.rewind()*/
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -257,7 +259,7 @@ class SoundWaveView : View {
 
     // used to compute the high and low values for every block
     interface SamplesGrouper {
-        fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short
+        fun groupSamples(samples: ShortBuffer, blocksAmount: Int, samplesAmount: Int, normalizeFactor: Float): ShortArray
     }
 
     // used to draw the blocks
@@ -320,31 +322,59 @@ private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFil
 // Class to compute block values taking the high sample for each block
 private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
 
-    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short {
-        var maxSample: Short = 0
+    override fun groupSamples(
+        samples: ShortBuffer,
+        blocksAmount: Int,
+        samplesAmount: Int,
+        normalizeFactor: Float
+    ): ShortArray {
 
-        for ( i in 0 until samplesAmount ) {
-            val sample: Short = samples.get()
-            if ( sample > maxSample ) maxSample = sample
+        val result = ShortArray(blocksAmount)
+
+        for (i in 0 until blocksAmount) {
+            var maxSample: Short = 0
+
+            for (j in 0 until samplesAmount) {
+                val sample: Short = samples.get()
+                if (sample > maxSample) maxSample = sample
+            }
+
+            result[i] = (maxSample * normalizeFactor).toShort()
         }
 
-        return maxSample
+        samples.rewind()
+
+        return result
     }
 }
 
 // Class to compute block values averaging the samples
 private class AverageSamplesGrouper : SoundWaveView.SamplesGrouper {
 
-    override fun groupSamples(samples: ShortBuffer, samplesAmount: Int): Short {
-        var positiveAltitude: Long = 0
+    override fun groupSamples(
+        samples: ShortBuffer,
+        blocksAmount: Int,
+        samplesAmount: Int,
+        normalizeFactor: Float
+    ): ShortArray {
 
-        for ( i in 0 until samplesAmount ) {
-            positiveAltitude += Math.abs(samples.get().toInt())
+        val result = ShortArray(blocksAmount)
+
+        for (i in 0 until blocksAmount) {
+            var altitude: Long = 0
+
+            for (j in 0 until samplesAmount) {
+                altitude += Math.abs(samples.get().toInt())
+            }
+
+            if (samplesAmount > 0) altitude /= samplesAmount
+
+            result[i] = (altitude * normalizeFactor).toShort()
         }
 
-        if ( samplesAmount > 0 ) positiveAltitude /= samplesAmount
+        samples.rewind()
 
-        return positiveAltitude.toShort()
+        return result
     }
 }
 
