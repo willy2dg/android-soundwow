@@ -5,6 +5,9 @@ import android.media.MediaCodec
 import android.media.MediaFormat
 import android.media.MediaExtractor
 import java.io.File
+import java.io.ObjectInputStream
+import java.io.ObjectOutputStream
+import java.io.Serializable
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.ShortBuffer
@@ -99,9 +102,11 @@ class SoundDecoder {
             var decodedBytes: ByteBuffer = ByteBuffer.allocate(1 shl 20)
             var firstSampleData: Boolean = true
             while (true) {
+
                 // read data from file and feed it to the decoder input buffers.
                 val inputBufferIndex = codec.dequeueInputBuffer(100)
                 if (!doneReading && inputBufferIndex >= 0) {
+
                     sampleSize = extractor.readSampleData(inputBuffers[inputBufferIndex], 0)
                     if (firstSampleData && mimeType == "audio/mp4a-latm" && sampleSize == 2) {
                         // For some reasons on some devices (e.g. the Samsung S3) you should not
@@ -127,6 +132,7 @@ class SoundDecoder {
 
                 // Get decoded stream from the decoder output buffers.
                 val outputBufferIndex = codec.dequeueOutputBuffer(info, 100)
+
                 if (outputBufferIndex >= 0 && info.size > 0) {
                     if (decodedSamplesSize < info.size) {
                         decodedSamplesSize = info.size
@@ -200,7 +206,27 @@ class SoundDecoder {
             codec.stop()
             codec.release()
 
-            return SoundInfo(songDuration, mimeType, channels, averageBitRate, numSamples, sampleRate, decodedBytes, decodedSamples)
+            val totalSamples = numSamples * channels
+            var reduceTo: Int = numSamples / 50 // 10000
+            if (totalSamples % reduceTo != 0) reduceTo += 1
+            val reductionStep: Int = totalSamples / reduceTo
+            val reducedSamples: ShortBuffer = ShortBuffer.allocate(reduceTo)
+
+            for (i in 0 until reduceTo){
+                val currentSampleIndex = i * reductionStep
+                var resumedSample: Short = 0
+                for (j in 0 until channels) {
+                    val sample = Math.abs(decodedSamples.get(currentSampleIndex + j).toInt())
+                    if (sample > resumedSample){
+                        resumedSample = sample.toShort()
+                    }
+                }
+                reducedSamples.put(resumedSample)
+            }
+
+            reducedSamples.rewind()
+
+            return SoundInfo(songDuration, mimeType, averageBitRate, reduceTo, sampleRate, reducedSamples)
         }
 
     }
@@ -209,10 +235,27 @@ class SoundDecoder {
 class SoundInfo(
     val size: Long,
     val format: String,
-    val channels: Int,
     val bitRate: Int,
     val samplesCount: Int,
     val sampleRate: Int,
-    val data: ByteBuffer,
-    val samples: ShortBuffer
-)
+    @Transient var samples: ShortBuffer
+) : Serializable {
+
+    companion object {
+        private const val serialVersionUID = 20190709L
+    }
+
+    private fun writeObject(oos: ObjectOutputStream){
+        val buffer: ByteBuffer = ByteBuffer.allocate(samplesCount * 2)
+        buffer.asShortBuffer().put(samples)
+        oos.defaultWriteObject()
+        oos.write(buffer.array())
+    }
+
+    private fun readObject(ois: ObjectInputStream){
+        ois.defaultReadObject()
+        //data = ByteBuffer.wrap(ois.readBytes())
+        samples = ByteBuffer.wrap(ois.readBytes()).asShortBuffer()
+    }
+
+}

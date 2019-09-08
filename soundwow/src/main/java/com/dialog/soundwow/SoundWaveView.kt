@@ -9,16 +9,18 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.os.AsyncTask
 import android.os.Build
+import android.os.Parcelable
 import android.util.AttributeSet
-import android.util.Log
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Toast
 import androidx.core.view.GestureDetectorCompat
-import java.io.File
 import java.lang.ref.WeakReference
 import java.nio.ShortBuffer
+import android.os.Bundle
+import java.io.*
+import java.lang.reflect.InvocationTargetException
+
 
 class SoundWaveView : View {
 
@@ -177,9 +179,12 @@ class SoundWaveView : View {
 
         val soundInfo: SoundInfo = soundInfo ?: return
 
-        val samplesPerBlock = (soundInfo.samplesCount * soundInfo.channels) / blocksAmount
-        val taskParams = ComputeBlockValuesTaskParams(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
-        ComputeBlockValuesTask(this).execute(taskParams)
+        val samplesPerBlock = if (soundInfo.samplesCount % (blocksAmount - 1) != 0) soundInfo.samplesCount / (blocksAmount - 1) else soundInfo.samplesCount / blocksAmount
+
+        //val taskParams = ComputeBlockValuesTaskParams(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
+        //ComputeBlockValuesTask(this).execute(taskParams)
+
+        blockValues = samplesGrouper.groupSamples(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor )
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -193,6 +198,46 @@ class SoundWaveView : View {
         if (width == 0 || blocksAmount < 1) return
 
         blockDrawer.drawBlocks(canvas, blockSettings, blockValues, topOrigin, bottomOrigin, currentBlock)
+    }
+
+    override fun onSaveInstanceState(): Parcelable? {
+        val bundle = Bundle()
+        bundle.putParcelable("superState", super.onSaveInstanceState())
+        bundle.putFloat("progress", progress)
+
+        try {
+            val fileName = "${context.cacheDir}/$id"
+            val fos = FileOutputStream(File(fileName)) // context.openFileOutput(id.toString(), Context.MODE_PRIVATE)
+            val os = ObjectOutputStream(fos)
+            os.writeObject(soundInfo)
+            os.close()
+            fos.close()
+        }catch(e: InvocationTargetException){
+            e.cause?.printStackTrace()
+        } catch (e: Exception){
+            e.printStackTrace()
+        }
+        return bundle
+    }
+
+    override fun onRestoreInstanceState(state: Parcelable?) {
+        if (state is Bundle) {
+            progress = state.getFloat("progress")
+
+            val fileName = "${context.cacheDir}/$id"
+            val file = File(fileName)
+            val fis: FileInputStream = FileInputStream(file) // context.openFileInput(id.toString())
+            val iss: ObjectInputStream = ObjectInputStream(fis)
+            soundInfo = iss.readObject() as SoundInfo
+            iss.close()
+            fis.close()
+            file.delete()
+
+
+            super.onRestoreInstanceState(state.getParcelable("superState"))
+        } else {
+            super.onRestoreInstanceState(state)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -358,6 +403,7 @@ private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
             for (j in 0 until samplesAmount) {
                 val sample: Short = samples.get()
                 if (sample > maxSample) maxSample = sample
+                if (!samples.hasRemaining()) break
             }
 
             result[i] = (maxSample * normalizeFactor).toShort()
@@ -386,6 +432,7 @@ private class AverageSamplesGrouper : SoundWaveView.SamplesGrouper {
 
             for (j in 0 until samplesAmount) {
                 altitude += Math.abs(samples.get().toInt())
+                if (!samples.hasRemaining()) break
             }
 
             if (samplesAmount > 0) altitude /= samplesAmount

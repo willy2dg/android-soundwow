@@ -6,7 +6,6 @@ import android.media.MediaPlayer
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Handler
-import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.LinearLayout
@@ -15,14 +14,19 @@ import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
 
+    lateinit var player1: SimplePlayer
+    lateinit var player2: SimplePlayer
+    lateinit var player3: SimplePlayer
+    lateinit var player4: SimplePlayer
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val player1 = SimplePlayer(this, R.id.sound_wave_view_1, R.raw.test1)
-        val player2 = SimplePlayer(this, R.id.sound_wave_view_2, R.raw.test2)
-        val player3 = SimplePlayer(this, R.id.sound_wave_view_3, R.raw.test3)
-        val player4 = SimplePlayer(this, R.id.sound_wave_view_4, R.raw.test3)
+        player1 = SimplePlayer(this, R.id.sound_wave_view_1, R.raw.test1)
+        player2 = SimplePlayer(this, R.id.sound_wave_view_2, R.raw.test2)
+        player3 = SimplePlayer(this, R.id.sound_wave_view_3, R.raw.test3)
+        player4 = SimplePlayer(this, R.id.sound_wave_view_4, R.raw.test3)
 
         player4.soundWaveView.blockSize = 10
         player4.soundWaveView.blockMargin = 4
@@ -33,13 +37,42 @@ class MainActivity : AppCompatActivity() {
         container.addView(player4.containerView)
 
         val inflatedSoundView = layoutInflater.inflate(R.layout.sound_view, container, false) as SoundWaveView
-        inflatedSoundView.setSound(resources.openRawResourceFd(R.raw.test2))
         container.addView(inflatedSoundView)
+
+        if (savedInstanceState == null) {
+            player1.loadSoundWaveView()
+            player2.loadSoundWaveView()
+            player3.loadSoundWaveView()
+            player4.loadSoundWaveView()
+            inflatedSoundView.setSound(resources.openRawResourceFd(R.raw.test2))
+        }
     }
 
+    override fun onSaveInstanceState(savedInstance: Bundle) {
+        super.onSaveInstanceState(savedInstance)
+
+        if (player1.playing) player1.togglePlay()
+        if (player2.playing) player2.togglePlay()
+        if (player3.playing) player3.togglePlay()
+        if (player4.playing) player4.togglePlay()
+
+        savedInstance.putInt("player1position", player1.mediaPlayer.currentPosition)
+        savedInstance.putInt("player2position", player2.mediaPlayer.currentPosition)
+        savedInstance.putInt("player3position", player3.mediaPlayer.currentPosition)
+        savedInstance.putInt("player4position", player4.mediaPlayer.currentPosition)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+
+        player1.mediaPlayer.seekTo(savedInstanceState.getInt("player1position"))
+        player2.mediaPlayer.seekTo(savedInstanceState.getInt("player2position"))
+        player3.mediaPlayer.seekTo(savedInstanceState.getInt("player3position"))
+        player4.mediaPlayer.seekTo(savedInstanceState.getInt("player4position"))
+    }
 }
 
-class SimplePlayer(context: Context, viewId: Int, assetId: Int) {
+class SimplePlayer(private val context: Context, private val viewId: Int, private val assetId: Int) {
 
     val mediaPlayer: MediaPlayer = MediaPlayer.create(context, assetId)
 
@@ -49,41 +82,59 @@ class SimplePlayer(context: Context, viewId: Int, assetId: Int) {
 
     var playing: Boolean = false
 
+    val waveViewUpdateHandler = Handler()
+    val waveViewUpdateRunnable = object: Runnable {
+        override fun run() {
+            // fix percent, since it never reaches the duration time
+            var percent = (mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration.toFloat()) / 0.995f
+            if (percent > 1f) percent = 1f
+            soundWaveView.progress = percent
+            waveViewUpdateHandler.postDelayed(this, 100)
+        }
+    }
+
     fun progressToMilliseconds(progress: Float): Int{
         return (progress * mediaPlayer.duration).toInt()
     }
 
+    fun loadSoundWaveView() {
+        soundWaveView.setSound(context.resources.openRawResourceFd(assetId))
+    }
+
+    fun togglePlay() {
+        if (playing) {
+            mediaPlayer.pause()
+            playerButton.setBackgroundResource(R.drawable.ic_action_play)
+            waveViewUpdateHandler.removeCallbacks(waveViewUpdateRunnable)
+        } else {
+            mediaPlayer.start()
+            playerButton.setBackgroundResource(R.drawable.ic_action_pause)
+            waveViewUpdateHandler.postDelayed(waveViewUpdateRunnable, 0)
+        }
+        playing = !playing
+    }
+
     init{
 
-        val waveViewUpdateHandler = Handler()
-        val waveViewUpdateRunnable = object: Runnable {
-            override fun run() {
-                val percent = mediaPlayer.currentPosition.toFloat() / mediaPlayer.duration.toFloat()
-                soundWaveView.progress = percent
-                waveViewUpdateHandler.postDelayed(this, 100)
-            }
-        }
+
 
         playerButton.height = 300
         playerButton.setBackgroundResource(R.drawable.ic_action_play)
         playerButton.setOnClickListener { view ->
-            if (playing) {
-                mediaPlayer.pause()
-                playerButton.setBackgroundResource(R.drawable.ic_action_play)
-                waveViewUpdateHandler.removeCallbacks(waveViewUpdateRunnable)
-            } else {
-                mediaPlayer.start()
-                playerButton.setBackgroundResource(R.drawable.ic_action_pause)
-                waveViewUpdateHandler.postDelayed(waveViewUpdateRunnable, 0)
-            }
-            playing = !playing
+            togglePlay()
         }
 
         soundWaveView.id = viewId
         soundWaveView.setBackgroundColor(Color.BLUE)
         soundWaveView.seekListener = object: SoundWaveView.OnSeekListener {
-            override fun onSeekBegin(progress: Float) {
 
+            var pausedBySeeking = false
+
+            override fun onSeekBegin(progress: Float) {
+                if (playing) {
+                    togglePlay()
+                    pausedBySeeking = true
+                }
             }
 
             override fun onSeekUpdate(progress: Float) {
@@ -92,10 +143,12 @@ class SimplePlayer(context: Context, viewId: Int, assetId: Int) {
 
             override fun onSeekComplete(progress: Float) {
                 mediaPlayer.seekTo(progressToMilliseconds(progress))
+                if (!playing && pausedBySeeking) {
+                    togglePlay()
+                    pausedBySeeking = false
+                }
             }
         }
-
-        soundWaveView.setSound(context.resources.openRawResourceFd(assetId))
 
         val containerParams =  LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 300)
         containerParams.topMargin = 200
