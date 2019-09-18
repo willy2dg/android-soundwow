@@ -14,10 +14,10 @@ import kotlinx.android.synthetic.main.activity_main.*
 
 class MainActivity : AppCompatActivity() {
 
-    lateinit var player1: SimplePlayer
-    lateinit var player2: SimplePlayer
-    lateinit var player3: SimplePlayer
-    lateinit var player4: SimplePlayer
+    private lateinit var player1: SimplePlayer
+    private lateinit var player2: SimplePlayer
+    private lateinit var player3: SimplePlayer
+    private lateinit var player4: SimplePlayer
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,10 +51,10 @@ class MainActivity : AppCompatActivity() {
     override fun onSaveInstanceState(savedInstance: Bundle) {
         super.onSaveInstanceState(savedInstance)
 
-        if (player1.playing) player1.togglePlay()
-        if (player2.playing) player2.togglePlay()
-        if (player3.playing) player3.togglePlay()
-        if (player4.playing) player4.togglePlay()
+        if (player1.playing) player1.pause()
+        if (player2.playing) player2.pause()
+        if (player3.playing) player3.pause()
+        if (player4.playing) player4.pause()
 
         savedInstance.putInt("player1position", player1.mediaPlayer.currentPosition)
         savedInstance.putInt("player2position", player2.mediaPlayer.currentPosition)
@@ -101,28 +101,39 @@ class SimplePlayer(private val context: Context, private val viewId: Int, privat
         soundWaveView.setSound(context.resources.openRawResourceFd(assetId))
     }
 
-    fun togglePlay() {
-        if (playing) {
-            mediaPlayer.pause()
-            playerButton.setBackgroundResource(R.drawable.ic_action_play)
-            waveViewUpdateHandler.removeCallbacks(waveViewUpdateRunnable)
-        } else {
-            mediaPlayer.start()
-            playerButton.setBackgroundResource(R.drawable.ic_action_pause)
-            waveViewUpdateHandler.postDelayed(waveViewUpdateRunnable, 0)
-        }
-        playing = !playing
+    fun play() {
+        mediaPlayer.start()
+        onPlayerStart()
+    }
+
+    fun pause() {
+        mediaPlayer.pause()
+        onPlayerStop()
+    }
+
+    private fun onPlayerStart() {
+        playing = true
+        waveViewUpdateHandler.postDelayed(waveViewUpdateRunnable, 0)
+        playerButton.setBackgroundResource(R.drawable.ic_action_pause)
+        playerButton.setOnClickListener { pause() }
+    }
+
+    private fun onPlayerStop() {
+        playing = false
+        waveViewUpdateHandler.removeCallbacks(waveViewUpdateRunnable)
+        playerButton.setBackgroundResource(R.drawable.ic_action_play)
+        playerButton.setOnClickListener { play() }
     }
 
     init{
 
-
+        mediaPlayer.setOnCompletionListener {
+            onPlayerStop()
+        }
 
         playerButton.height = 300
         playerButton.setBackgroundResource(R.drawable.ic_action_play)
-        playerButton.setOnClickListener { view ->
-            togglePlay()
-        }
+        playerButton.setOnClickListener { play() }
 
         soundWaveView.id = viewId
         soundWaveView.setBackgroundColor(Color.BLUE)
@@ -132,7 +143,7 @@ class SimplePlayer(private val context: Context, private val viewId: Int, privat
 
             override fun onSeekBegin(progress: Float) {
                 if (playing) {
-                    togglePlay()
+                    pause()
                     pausedBySeeking = true
                 }
             }
@@ -143,10 +154,8 @@ class SimplePlayer(private val context: Context, private val viewId: Int, privat
 
             override fun onSeekComplete(progress: Float) {
                 mediaPlayer.seekTo(progressToMilliseconds(progress))
-                if (!playing && pausedBySeeking) {
-                    togglePlay()
-                    pausedBySeeking = false
-                }
+                if (!playing && pausedBySeeking) play()
+                pausedBySeeking = false
             }
         }
 

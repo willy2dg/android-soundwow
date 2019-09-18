@@ -17,7 +17,7 @@ class SoundDecoder {
     companion object {
 
         @Throws(java.io.FileNotFoundException::class, java.io.IOException::class, Exception::class)
-        fun decode(inputFile: File): SoundInfo {
+        fun decode(inputFile: File): SoundSamplesResume {
             val extractor = MediaExtractor()
             var selectedTrack = false
             lateinit var format: MediaFormat
@@ -45,7 +45,7 @@ class SoundDecoder {
         }
 
         @Throws(java.io.FileNotFoundException::class, java.io.IOException::class, Exception::class)
-        fun decode(inputFile: AssetFileDescriptor): SoundInfo {
+        fun decode(inputFile: AssetFileDescriptor): SoundSamplesResume {
             val extractor = MediaExtractor()
             var selectedTrack = false
             lateinit var format: MediaFormat
@@ -72,7 +72,7 @@ class SoundDecoder {
             return extract(extractor, format, fileSize)
         }
 
-        private fun extract(extractor: MediaExtractor, format: MediaFormat, mFileSize: Int) : SoundInfo {
+        private fun extract(extractor: MediaExtractor, format: MediaFormat, mFileSize: Int) : SoundSamplesResume {
 
             val channels: Int = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
             val sampleRate: Int = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
@@ -200,8 +200,7 @@ class SoundDecoder {
             decodedBytes.rewind()
             decodedBytes.order(ByteOrder.LITTLE_ENDIAN)
             val decodedSamples: ShortBuffer = decodedBytes.asShortBuffer()
-            val averageBitRate: Int = (mFileSize * 8 * (sampleRate.toFloat() / numSamples) / 1000).toInt()
-
+            
             extractor.release()
             codec.stop()
             codec.release()
@@ -226,18 +225,14 @@ class SoundDecoder {
 
             reducedSamples.rewind()
 
-            return SoundInfo(songDuration, mimeType, averageBitRate, reduceTo, sampleRate, reducedSamples)
+            return SoundSamplesResume(reduceTo, reducedSamples)
         }
 
     }
 }
 
-class SoundInfo(
-    val size: Long,
-    val format: String,
-    val bitRate: Int,
+class SoundSamplesResume(
     val samplesCount: Int,
-    val sampleRate: Int,
     @Transient var samples: ShortBuffer
 ) : Serializable {
 
@@ -254,7 +249,6 @@ class SoundInfo(
 
     private fun readObject(ois: ObjectInputStream){
         ois.defaultReadObject()
-        //data = ByteBuffer.wrap(ois.readBytes())
         samples = ByteBuffer.wrap(ois.readBytes()).asShortBuffer()
     }
 

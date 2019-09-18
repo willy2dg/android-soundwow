@@ -54,7 +54,7 @@ class SoundWaveView : View {
             invalidate()
         }
 
-    var soundInfo: SoundInfo? = null // decoded sound
+    var soundSamplesResume: SoundSamplesResume? = null // decoded sound
         set(value){
             field = value
             computeBlockData()
@@ -177,14 +177,11 @@ class SoundWaveView : View {
 
         blockValues = ShortArray(blocksAmount){ 0 }
 
-        val soundInfo: SoundInfo = soundInfo ?: return
+        val soundSamplesResume: SoundSamplesResume = soundSamplesResume ?: return
 
-        val samplesPerBlock = if (soundInfo.samplesCount % (blocksAmount - 1) != 0) soundInfo.samplesCount / (blocksAmount - 1) else soundInfo.samplesCount / blocksAmount
+        val samplesPerBlock = if (soundSamplesResume.samplesCount % (blocksAmount - 1) != 0) soundSamplesResume.samplesCount / (blocksAmount - 1) else soundSamplesResume.samplesCount / blocksAmount
 
-        //val taskParams = ComputeBlockValuesTaskParams(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor)
-        //ComputeBlockValuesTask(this).execute(taskParams)
-
-        blockValues = samplesGrouper.groupSamples(soundInfo.samples, blocksAmount, samplesPerBlock, normalizeFactor )
+        blockValues = samplesGrouper.groupSamples(soundSamplesResume.samples, blocksAmount, samplesPerBlock, normalizeFactor )
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -209,7 +206,7 @@ class SoundWaveView : View {
             val fileName = "${context.cacheDir}/$id"
             val fos = FileOutputStream(File(fileName)) // context.openFileOutput(id.toString(), Context.MODE_PRIVATE)
             val os = ObjectOutputStream(fos)
-            os.writeObject(soundInfo)
+            os.writeObject(soundSamplesResume)
             os.close()
             fos.close()
         }catch(e: InvocationTargetException){
@@ -228,7 +225,7 @@ class SoundWaveView : View {
             val file = File(fileName)
             val fis: FileInputStream = FileInputStream(file) // context.openFileInput(id.toString())
             val iss: ObjectInputStream = ObjectInputStream(fis)
-            soundInfo = iss.readObject() as SoundInfo
+            soundSamplesResume = iss.readObject() as SoundSamplesResume
             iss.close()
             fis.close()
             file.delete()
@@ -330,60 +327,40 @@ class SoundWaveView : View {
 }
 
 // AsyncTaks to decode the sound from File
-private class DecodeSoundFileTask(waveView: SoundWaveView) : AsyncTask<File, Void, SoundInfo>() {
+private class DecodeSoundFileTask(waveView: SoundWaveView) : AsyncTask<File, Void, SoundSamplesResume>() {
 
     private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
 
-    override fun doInBackground(vararg files: File): SoundInfo {
+    override fun doInBackground(vararg files: File): SoundSamplesResume {
         return SoundDecoder.decode(files[0])
     }
 
-    override fun onPostExecute(result: SoundInfo) {
+    override fun onPostExecute(result: SoundSamplesResume) {
         super.onPostExecute(result)
 
         val waveView: SoundWaveView? = waveViewReference.get()
 
-        waveView?.soundInfo = result
+        waveView?.soundSamplesResume = result
     }
 }
 
 // AsyncTask to decode the sound from AssetFileDescriptor
-private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFileDescriptor, Void, SoundInfo>() {
+private class DecodeSoundAssetTask(waveView: SoundWaveView) : AsyncTask<AssetFileDescriptor, Void, SoundSamplesResume>() {
 
     private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
 
-    override fun doInBackground(vararg assetFileDescriptors: AssetFileDescriptor): SoundInfo {
+    override fun doInBackground(vararg assetFileDescriptors: AssetFileDescriptor): SoundSamplesResume {
         return SoundDecoder.decode(assetFileDescriptors[0])
     }
 
-    override fun onPostExecute(result: SoundInfo) {
+    override fun onPostExecute(result: SoundSamplesResume) {
         super.onPostExecute(result)
 
         val waveView: SoundWaveView? = waveViewReference.get()
 
-        waveView?.soundInfo = result
+        waveView?.soundSamplesResume = result
     }
 }
-
-// AsyncTask to compute block values
-private class ComputeBlockValuesTask(waveView: SoundWaveView) : AsyncTask<ComputeBlockValuesTaskParams, Void, ShortArray>() {
-
-    private val waveViewReference: WeakReference<SoundWaveView> = WeakReference(waveView)
-
-    override fun doInBackground(vararg params: ComputeBlockValuesTaskParams): ShortArray? {
-        val waveView: SoundWaveView = waveViewReference.get() ?: return null
-        return waveView.samplesGrouper.groupSamples(params[0].samples, params[0].blocksAmount, params[0].samplesPerBlock, params[0].normalizeFactor )
-    }
-
-    override fun onPostExecute(result: ShortArray?) {
-        super.onPostExecute(result)
-
-        val waveView: SoundWaveView = waveViewReference.get() ?: return
-        waveView.blockValues = result ?: return
-    }
-}
-
-private class ComputeBlockValuesTaskParams(val samples: ShortBuffer, val blocksAmount: Int, val samplesPerBlock: Int, val normalizeFactor: Float)
 
 // Class to compute block values taking the high sample for each block
 private class MaxSamplesGrouper : SoundWaveView.SamplesGrouper {
