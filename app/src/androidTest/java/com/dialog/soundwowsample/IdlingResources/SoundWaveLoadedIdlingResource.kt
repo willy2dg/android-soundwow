@@ -32,7 +32,7 @@ class SoundWaveLoadedIdlingResource : IdlingResource {
 
         val soundWaveView = currentActivity?.findViewById<SoundWaveView>(R.id.sound_wave_view_1)
 
-        isIdle = soundWaveView?.soundInfo != null
+        isIdle = soundWaveView?.soundSamplesResume != null
 
         if (isIdle) resourceCallback?.onTransitionToIdle()
 
